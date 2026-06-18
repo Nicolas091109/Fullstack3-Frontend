@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Camera, MapPin, Upload, Info, HeartHandshake, CheckCircle2, AlertCircle 
+  Camera, MapPin, Upload, Info, HeartHandshake, CheckCircle2, AlertCircle, Maximize2, X
 } from 'lucide-react';
 import chileMap from '../../../assets/chile_satellite_map.png';
 
@@ -56,8 +56,11 @@ export const CreateReportView: React.FC = () => {
   const [mapX, setMapX] = useState<number>(50); // percentage
   const [mapY, setMapY] = useState<number>(50); // percentage
   
-  // Autocomplete Suggestions State
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  // Autocomplete & expanded map states
+  const [suggestions, setSuggestions] = useState<{ displayName: string; lat: number; lon: number }[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
   // UI state
   const [isDragActive, setIsDragActive] = useState(false);
@@ -66,51 +69,63 @@ export const CreateReportView: React.FC = () => {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Address parsing & autocomplete
+  // Address parsing & autocomplete using OpenStreetMap Nominatim
   const handleLocationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setLocation(value);
     
-    if (!value.trim()) {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    if (!value.trim() || value.length < 3) {
       setSuggestions([]);
       return;
     }
 
-    const normalizedValue = value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-    const hasCommune = COMUNAS_SANTIAGO.some(c => 
-      c.keywords.some(k => normalizedValue.includes(k))
-    );
-
-    if (hasCommune) {
-      const matchingCommune = COMUNAS_SANTIAGO.find(c => 
-        c.keywords.some(k => normalizedValue.includes(k))
-      );
-      if (matchingCommune) {
-        setMapX(matchingCommune.x);
-        setMapY(matchingCommune.y);
+    debounceRef.current = setTimeout(async () => {
+      setLoadingSuggestions(true);
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(
+            value
+          )}&format=json&limit=5&countrycodes=cl&addressdetails=1`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const formatted = data.map((item: any) => ({
+            displayName: item.display_name,
+            lat: parseFloat(item.lat),
+            lon: parseFloat(item.lon)
+          }));
+          setSuggestions(formatted);
+        }
+      } catch (err) {
+        console.error("Geocoding error:", err);
+      } finally {
+        setLoadingSuggestions(false);
       }
-      setSuggestions([]);
-    } else {
-      const popularCommunes = ['Santiago Centro', 'Providencia', 'Las Condes', 'Maipú', 'La Florida', 'Puente Alto', 'Ñuñoa', 'Quilicura'];
-      const currentText = value.trim();
-      const list = popularCommunes.map(commune => `${currentText}, ${commune}, Santiago`);
-      setSuggestions(list);
-    }
+    }, 500);
   };
 
-  const handleSelectSuggestion = (suggestion: string) => {
-    setLocation(suggestion);
+  const handleSelectSuggestion = (sug: { displayName: string; lat: number; lon: number }) => {
+    const parts = sug.displayName.split(',');
+    const shortName = parts.slice(0, 3).map(p => p.trim()).join(', ');
+    setLocation(shortName);
     setSuggestions([]);
 
-    const normalizedSuggestion = suggestion.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const matchingCommune = COMUNAS_SANTIAGO.find(c => 
-      c.keywords.some(k => normalizedSuggestion.includes(k))
-    );
-    if (matchingCommune) {
-      setMapX(matchingCommune.x);
-      setMapY(matchingCommune.y);
-    }
+    // Translate lat/lon GPS coordinates of Chile/Santiago to custom map percentages
+    // West: -70.85, East: -70.49 (span: 0.36)
+    // North: -33.30, South: -33.60 (span: -0.30)
+    let x = ((sug.lon + 70.85) / 0.36) * 100;
+    let y = ((sug.lat + 33.30) / -0.30) * 100;
+
+    // Clamp coordinates to keep the pin within visible boundaries of the map
+    x = Math.max(5, Math.min(95, x));
+    y = Math.max(5, Math.min(95, y));
+
+    setMapX(Math.round(x));
+    setMapY(Math.round(y));
   };
 
   const handleBlur = () => {
@@ -456,19 +471,25 @@ export const CreateReportView: React.FC = () => {
                 />
 
                 {/* Autocomplete Suggestions Dropdown */}
-                {suggestions.length > 0 && (
+                {(suggestions.length > 0 || loadingSuggestions) && (
                   <div className="absolute left-0 right-0 z-30 mt-1.5 bg-white border border-[#E9E1D4] rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-[#E9E1D4]/50">
-                    {suggestions.map((sug, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleSelectSuggestion(sug)}
-                        className="w-full text-left px-4 py-2.5 hover:bg-[#FDFBF7] text-xxs font-semibold text-brand-secondary hover:text-brand-primary flex items-center space-x-2 border-0 bg-transparent cursor-pointer"
-                      >
-                        <MapPin className="h-3.5 w-3.5 text-brand-primary flex-shrink-0" />
-                        <span className="truncate">{sug}</span>
-                      </button>
-                    ))}
+                    {loadingSuggestions ? (
+                      <div className="p-3 text-center text-xxs font-semibold text-brand-secondary italic">
+                        Buscando direcciones...
+                      </div>
+                    ) : (
+                      suggestions.map((sug, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleSelectSuggestion(sug)}
+                          className="w-full text-left px-4 py-2.5 hover:bg-[#FDFBF7] text-xxs font-semibold text-brand-secondary hover:text-brand-primary flex items-center space-x-2 border-0 bg-transparent cursor-pointer"
+                        >
+                          <MapPin className="h-3.5 w-3.5 text-brand-primary flex-shrink-0" />
+                          <span className="truncate">{sug.displayName}</span>
+                        </button>
+                      ))
+                    )}
                   </div>
                 )}
               </div>
@@ -502,17 +523,33 @@ export const CreateReportView: React.FC = () => {
               </span>
             </div>
             <p className="text-[10px] text-brand-secondary leading-relaxed block px-1">
-              Haz clic sobre la siguiente cuadrícula para definir el punto donde avistaste o perdiste a la mascota. Esto colocará un pin animado sobre el Mapa Satelital de brigadas.
+              Haz clic sobre la siguiente cuadrícula o amplía el mapa para definir de forma precisa el punto donde avistaste o perdiste a la mascota. Esto colocará un pin animado en el mapa.
             </p>
 
             <div 
-              onClick={handleMapSelection}
-              className="relative aspect-[21/9] w-full rounded-2xl bg-cover bg-center border border-[#E9E1D4] overflow-hidden cursor-crosshair group shadow-inner"
-              style={{ backgroundImage: `url(${chileMap})` }}
+              className="relative aspect-[21/9] w-full rounded-2xl border border-[#E9E1D4] overflow-hidden group shadow-inner"
             >
+              {/* Map clickable area */}
+              <div 
+                onClick={handleMapSelection}
+                className="absolute inset-0 bg-cover bg-center cursor-crosshair"
+                style={{ backgroundImage: `url(${chileMap})` }}
+              />
+
+              {/* Expand Button */}
+              <button
+                type="button"
+                onClick={() => setIsMapExpanded(true)}
+                className="absolute top-3 right-3 z-10 p-2 bg-white/90 hover:bg-white text-brand-secondary hover:text-brand-primary rounded-xl shadow-md border border-[#E9E1D4]/60 backdrop-blur-sm transition-all cursor-pointer flex items-center space-x-1"
+                title="Expandir Mapa"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+                <span className="text-[9px] font-bold uppercase tracking-wider">Ampliar</span>
+              </button>
+
               {/* Satellite blueprint grid visual */}
-              <div className="absolute inset-0 bg-brand-primary-light/10" />
-              <div className="absolute inset-0 flex items-center justify-center opacity-20">
+              <div className="absolute inset-0 pointer-events-none bg-brand-primary-light/10" />
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-20">
                 <p className="text-[9px] font-mono font-bold tracking-widest text-[#4A5D4E] select-none">
                   SATELLITE SECTOR CHILE AREA
                 </p>
@@ -520,7 +557,7 @@ export const CreateReportView: React.FC = () => {
 
               {/* Pulsing Pin Indicator */}
               <div 
-                className="absolute w-4 h-4 -ml-2 -mt-2 rounded-full bg-brand-primary border-2 border-[#FDFBF7] shadow-md flex items-center justify-center transition-all duration-300"
+                className="absolute w-4 h-4 -ml-2 -mt-2 rounded-full bg-brand-primary border-2 border-[#FDFBF7] shadow-md flex items-center justify-center transition-all duration-300 pointer-events-none"
                 style={{ left: `${mapX}%`, top: `${mapY}%` }}
               >
                 <span className="absolute inline-flex h-full w-full rounded-full bg-brand-primary/40 animate-ping" />
@@ -541,6 +578,83 @@ export const CreateReportView: React.FC = () => {
 
         </form>
       </div>
+
+      {/* Expanded Map Modal */}
+      <AnimatePresence>
+      {isMapExpanded && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.6 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setIsMapExpanded(false)}
+            className="absolute inset-0 bg-[#1C241E]"
+          />
+
+          {/* Modal Content */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="relative w-full max-w-4xl bg-white rounded-[24px] overflow-hidden border border-[#E9E1D4] shadow-lg flex flex-col p-6 space-y-4 z-10"
+          >
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-base font-serif italic text-brand-primary">
+                  Ajustar Ubicación en Mapa Satelital
+                </h3>
+                <p className="text-[10px] text-brand-secondary">
+                  Haz clic en el mapa para ubicar de forma precisa el punto de avistamiento.
+                </p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsMapExpanded(false)}
+                className="p-2 bg-brand-primary-light hover:bg-[#E9E1D4]/60 rounded-full text-brand-secondary transition-all border-0 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Large Map Container */}
+            <div 
+              onClick={handleMapSelection}
+              className="relative w-full h-[60vh] rounded-2xl bg-cover bg-center border border-[#E9E1D4] overflow-hidden cursor-crosshair shadow-inner"
+              style={{ backgroundImage: `url(${chileMap})` }}
+            >
+              {/* Grid Overlay */}
+              <div className="absolute inset-0 pointer-events-none bg-brand-primary-light/10" />
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-10">
+                <p className="text-sm font-mono font-bold tracking-widest text-[#4A5D4E] select-none">
+                  DETALLE SATELITAL AMPLIADO SANTIAGO
+                </p>
+              </div>
+
+              {/* Pulsing Pin Indicator */}
+              <div 
+                className="absolute w-6 h-6 -ml-3 -mt-3 rounded-full bg-brand-accent border-2 border-white shadow-lg flex items-center justify-center transition-all duration-300 pointer-events-none"
+                style={{ left: `${mapX}%`, top: `${mapY}%` }}
+              >
+                <span className="absolute inline-flex h-full w-full rounded-full bg-brand-accent/40 animate-ping" />
+                <div className="w-2.5 h-2.5 rounded-full bg-white" />
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center text-xxs font-semibold text-brand-secondary">
+              <span>Coordenadas seleccionadas: X: {mapX}%, Y: {mapY}%</span>
+              <button
+                type="button"
+                onClick={() => setIsMapExpanded(false)}
+                className="h-9 px-5 bg-brand-primary hover:bg-brand-primary-hover text-[#FDFBF7] rounded-xl font-bold uppercase tracking-wider border-0 cursor-pointer"
+              >
+                Confirmar Ubicación
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
 
     </div>
   );

@@ -57,7 +57,7 @@ export const CreateReportView: React.FC = () => {
   const [mapY, setMapY] = useState<number>(50); // percentage
   
   // Autocomplete & expanded map states
-  const [suggestions, setSuggestions] = useState<{ displayName: string; lat: number; lon: number }[]>([]);
+  const [suggestions, setSuggestions] = useState<{ displayName: string; fullAddress: string; lat: number; lon: number }[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
@@ -93,11 +93,31 @@ export const CreateReportView: React.FC = () => {
         );
         if (response.ok) {
           const data = await response.json();
-          const formatted = data.map((item: any) => ({
-            displayName: item.display_name,
-            lat: parseFloat(item.lat),
-            lon: parseFloat(item.lon)
-          }));
+          const formatted = data.map((item: any) => {
+            const addr = item.address || {};
+            const street = addr.road || addr.pedestrian || addr.path || addr.suburb || '';
+            const num = addr.house_number ? ` ${addr.house_number}` : '';
+            const commune = addr.suburb || addr.city_district || addr.town || addr.city || '';
+            
+            let label = '';
+            if (street) {
+              label += `${street}${num}`;
+            }
+            if (commune) {
+              label += label ? `, ${commune}` : commune;
+            }
+            
+            if (!label) {
+              label = item.display_name.split(',').slice(0, 3).join(', ');
+            }
+
+            return {
+              displayName: label,
+              fullAddress: item.display_name,
+              lat: parseFloat(item.lat),
+              lon: parseFloat(item.lon)
+            };
+          });
           setSuggestions(formatted);
         }
       } catch (err) {
@@ -108,10 +128,8 @@ export const CreateReportView: React.FC = () => {
     }, 500);
   };
 
-  const handleSelectSuggestion = (sug: { displayName: string; lat: number; lon: number }) => {
-    const parts = sug.displayName.split(',');
-    const shortName = parts.slice(0, 3).map(p => p.trim()).join(', ');
-    setLocation(shortName);
+  const handleSelectSuggestion = (sug: { displayName: string; fullAddress: string; lat: number; lon: number }) => {
+    setLocation(sug.displayName);
     setSuggestions([]);
 
     // Translate lat/lon GPS coordinates of Chile/Santiago to custom map percentages

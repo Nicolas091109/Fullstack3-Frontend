@@ -253,7 +253,7 @@ export const ViewReportsView: React.FC = () => {
             >
               
               {/* Image Banner header block */}
-              <div className="aspect-[16/10] w-full relative bg-[#FDFBF7]">
+              <div className="h-48 sm:h-60 w-full relative bg-[#FDFBF7] overflow-hidden">
                 <img 
                   src={selectedReport.photo} 
                   alt={selectedReport.name} 

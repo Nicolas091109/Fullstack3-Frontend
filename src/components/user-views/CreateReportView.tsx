@@ -6,6 +6,40 @@ import {
 } from 'lucide-react';
 import chileMap from '../../../assets/chile_satellite_map.png';
 
+const COMUNAS_SANTIAGO = [
+  { name: 'Santiago Centro', keywords: ['santiago', 'centro', 'santiago centro'], x: 48, y: 46 },
+  { name: 'Providencia', keywords: ['providencia'], x: 53, y: 44 },
+  { name: 'Las Condes', keywords: ['las condes', 'condes'], x: 65, y: 38 },
+  { name: 'Vitacura', keywords: ['vitacura'], x: 64, y: 32 },
+  { name: 'Lo Barnechea', keywords: ['lo barnechea', 'barnechea'], x: 72, y: 26 },
+  { name: 'Ñuñoa', keywords: ['ñuñoa', 'nunoa'], x: 54, y: 50 },
+  { name: 'La Reina', keywords: ['la reina', 'reina'], x: 64, y: 48 },
+  { name: 'Macul', keywords: ['macul'], x: 56, y: 56 },
+  { name: 'Peñalolén', keywords: ['peñalolen', 'penalolen'], x: 66, y: 58 },
+  { name: 'La Florida', keywords: ['la florida', 'florida'], x: 60, y: 68 },
+  { name: 'Puente Alto', keywords: ['puente alto'], x: 64, y: 80 },
+  { name: 'Maipú', keywords: ['maipu', 'maipú'], x: 26, y: 58 },
+  { name: 'Pudahuel', keywords: ['pudahuel'], x: 24, y: 42 },
+  { name: 'Lo Prado', keywords: ['lo prado', 'prado'], x: 34, y: 44 },
+  { name: 'Quinta Normal', keywords: ['quinta normal'], x: 38, y: 42 },
+  { name: 'Estación Central', keywords: ['estacion central', 'estación central'], x: 40, y: 48 },
+  { name: 'Cerrillos', keywords: ['cerrillos'], x: 36, y: 56 },
+  { name: 'Pedro Aguirre Cerda', keywords: ['pedro aguirre cerda', 'pac'], x: 42, y: 54 },
+  { name: 'San Miguel', keywords: ['san miguel'], x: 48, y: 56 },
+  { name: 'San Joaquín', keywords: ['san joaquin', 'san joaquín'], x: 52, y: 56 },
+  { name: 'La Cisterna', keywords: ['la cisterna', 'cisterna'], x: 46, y: 64 },
+  { name: 'Lo Espejo', keywords: ['lo espejo', 'espejo'], x: 40, y: 64 },
+  { name: 'El Bosque', keywords: ['el bosque', 'bosque'], x: 46, y: 72 },
+  { name: 'San Bernardo', keywords: ['san bernardo', 'bernardo'], x: 42, y: 82 },
+  { name: 'La Pintana', keywords: ['la pintana', 'pintana'], x: 52, y: 78 },
+  { name: 'Quilicura', keywords: ['quilicura'], x: 32, y: 26 },
+  { name: 'Huechuraba', keywords: ['huechuraba'], x: 48, y: 28 },
+  { name: 'Recoleta', keywords: ['recoleta'], x: 48, y: 36 },
+  { name: 'Independencia', keywords: ['independencia'], x: 44, y: 38 },
+  { name: 'Conchalí', keywords: ['conchali', 'conchalí'], x: 42, y: 32 },
+  { name: 'Renca', keywords: ['renca'], x: 34, y: 34 }
+];
+
 export const CreateReportView: React.FC = () => {
   const { addReport } = useApp();
   
@@ -21,6 +55,9 @@ export const CreateReportView: React.FC = () => {
   // Custom Map Coordinate Selector
   const [mapX, setMapX] = useState<number>(50); // percentage
   const [mapY, setMapY] = useState<number>(50); // percentage
+  
+  // Autocomplete Suggestions State
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
   // UI state
   const [isDragActive, setIsDragActive] = useState(false);
@@ -28,6 +65,59 @@ export const CreateReportView: React.FC = () => {
   const [error, setError] = useState('');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Address parsing & autocomplete
+  const handleLocationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setLocation(value);
+    
+    if (!value.trim()) {
+      setSuggestions([]);
+      return;
+    }
+
+    const normalizedValue = value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    const hasCommune = COMUNAS_SANTIAGO.some(c => 
+      c.keywords.some(k => normalizedValue.includes(k))
+    );
+
+    if (hasCommune) {
+      const matchingCommune = COMUNAS_SANTIAGO.find(c => 
+        c.keywords.some(k => normalizedValue.includes(k))
+      );
+      if (matchingCommune) {
+        setMapX(matchingCommune.x);
+        setMapY(matchingCommune.y);
+      }
+      setSuggestions([]);
+    } else {
+      const popularCommunes = ['Santiago Centro', 'Providencia', 'Las Condes', 'Maipú', 'La Florida', 'Puente Alto', 'Ñuñoa', 'Quilicura'];
+      const currentText = value.trim();
+      const list = popularCommunes.map(commune => `${currentText}, ${commune}, Santiago`);
+      setSuggestions(list);
+    }
+  };
+
+  const handleSelectSuggestion = (suggestion: string) => {
+    setLocation(suggestion);
+    setSuggestions([]);
+
+    const normalizedSuggestion = suggestion.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const matchingCommune = COMUNAS_SANTIAGO.find(c => 
+      c.keywords.some(k => normalizedSuggestion.includes(k))
+    );
+    if (matchingCommune) {
+      setMapX(matchingCommune.x);
+      setMapY(matchingCommune.y);
+    }
+  };
+
+  const handleBlur = () => {
+    setTimeout(() => {
+      setSuggestions([]);
+    }, 200);
+  };
 
   // Read file as base64 for preview and simulation storage
   const handleFile = (file: File) => {
@@ -359,10 +449,28 @@ export const CreateReportView: React.FC = () => {
                   type="text"
                   required
                   value={location}
-                  onChange={(e) => setLocation(e.target.value)}
+                  onChange={handleLocationChange}
+                  onBlur={handleBlur}
                   placeholder="Ej: Av. Providencia 1200, Providencia, Santiago"
                   className="w-full pl-10 pr-4 h-11 bg-[#FDFBF7] border border-[#E9E1D4] rounded-xl focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/10 text-xs font-semibold text-[#2D2D2D]"
                 />
+
+                {/* Autocomplete Suggestions Dropdown */}
+                {suggestions.length > 0 && (
+                  <div className="absolute left-0 right-0 z-30 mt-1.5 bg-white border border-[#E9E1D4] rounded-xl shadow-lg max-h-48 overflow-y-auto divide-y divide-[#E9E1D4]/50">
+                    {suggestions.map((sug, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleSelectSuggestion(sug)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-[#FDFBF7] text-xxs font-semibold text-brand-secondary hover:text-brand-primary flex items-center space-x-2 border-0 bg-transparent cursor-pointer"
+                      >
+                        <MapPin className="h-3.5 w-3.5 text-brand-primary flex-shrink-0" />
+                        <span className="truncate">{sug}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 

@@ -1,17 +1,79 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Report } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Search, Filter, MapPin, Calendar, Compass, 
-  Info, Eye, X, BookOpen, AlertCircle, Sparkles, Smile, MessageSquare, PhoneCall
+  Info, Eye, X, BookOpen, AlertCircle, Sparkles, Smile, MessageSquare, PhoneCall,
+  Camera, CheckCircle, HelpCircle
 } from 'lucide-react';
 
 export const ViewReportsView: React.FC = () => {
-  const { reports } = useApp();
+  const { reports, user, addComment, updateReport } = useApp();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+
+  // Comments input states
+  const [commentText, setCommentText] = useState('');
+  const [commentPhoto, setCommentPhoto] = useState<string | undefined>(undefined);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleCommentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedReport || !commentText.trim()) return;
+
+    try {
+      await addComment(selectedReport.id, commentText, commentPhoto);
+      
+      const newComment = {
+        id: Math.random().toString(),
+        texto: commentText,
+        foto: commentPhoto,
+        usuarioId: user?.id || 0,
+        usuarioNombre: user?.name || 'Vecino Anónimo',
+        fechaRegistro: new Date().toISOString()
+      };
+      
+      setSelectedReport({
+        ...selectedReport,
+        comments: [...(selectedReport.comments || []), newComment]
+      });
+
+      setCommentText('');
+      setCommentPhoto(undefined);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setCommentPhoto(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleToggleStatus = async () => {
+    if (!selectedReport) return;
+    try {
+      const newStatus = selectedReport.status === 'Perdido' ? 'Encontrado' : 'Perdido';
+      const updated = {
+        ...selectedReport,
+        status: newStatus
+      };
+      await updateReport(updated);
+      setSelectedReport(updated);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   // Filter actions
   const filteredReports = reports.filter((r) => {
@@ -282,14 +344,148 @@ export const ViewReportsView: React.FC = () => {
                   </div>
 
                   <div className="flex space-x-2 w-full sm:w-auto">
-                    <a 
-                      href={`mailto:${selectedReport.reporterEmail}?subject=Sanos y Salvos - Info sobre ${selectedReport.name}`}
-                      className="flex-1 sm:flex-none h-9 px-4 bg-brand-accent hover:bg-brand-accent/90 text-white rounded-xl text-xxs font-bold flex items-center justify-center space-x-1.5 shadow-sm uppercase tracking-wider border-0"
-                    >
-                      <MessageSquare className="h-3.5 w-3.5" />
-                      <span>Contactar</span>
-                    </a>
+                    {user && selectedReport.originalUsuarioId === user.id ? (
+                      <button 
+                        onClick={handleToggleStatus}
+                        className={`flex-1 sm:flex-none h-9 px-4 rounded-xl text-xxs font-bold flex items-center justify-center space-x-1.5 shadow-sm uppercase tracking-wider border-0 cursor-pointer text-white ${
+                          selectedReport.status === 'Perdido'
+                            ? 'bg-brand-primary hover:bg-brand-primary-hover'
+                            : 'bg-brand-accent hover:bg-brand-accent/90'
+                        }`}
+                      >
+                        {selectedReport.status === 'Perdido' ? (
+                          <>
+                            <CheckCircle className="h-3.5 w-3.5" />
+                            <span>Marcar como Encontrado</span>
+                          </>
+                        ) : (
+                          <>
+                            <HelpCircle className="h-3.5 w-3.5" />
+                            <span>Marcar como Perdido</span>
+                          </>
+                        )}
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={() => {
+                          if (user) {
+                            navigate('/usuario/chats', { 
+                              state: { 
+                                startChatWith: { 
+                                  id: selectedReport.originalUsuarioId, 
+                                  name: selectedReport.reporter 
+                                } 
+                              } 
+                            });
+                          } else {
+                            navigate('/login');
+                          }
+                        }}
+                        className="flex-1 sm:flex-none h-9 px-4 bg-brand-accent hover:bg-brand-accent/90 text-white rounded-xl text-xxs font-bold flex items-center justify-center space-x-1.5 shadow-sm uppercase tracking-wider border-0 cursor-pointer"
+                      >
+                        <MessageSquare className="h-3.5 w-3.5" />
+                        <span>Chat Privado</span>
+                      </button>
+                    )}
                   </div>
+                </div>
+
+                {/* Comments Section */}
+                <div className="space-y-4 pt-4 border-t border-[#E9E1D4]">
+                  <h4 className="text-[10px] font-bold text-brand-secondary uppercase tracking-widest flex items-center">
+                    <MessageSquare className="h-4 w-4 mr-1 text-brand-secondary opacity-60" />
+                    Avistamientos y Comentarios de la Comunidad:
+                  </h4>
+
+                  {/* List of comments */}
+                  <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
+                    {selectedReport.comments && selectedReport.comments.length > 0 ? (
+                      selectedReport.comments.map((comment, index) => (
+                        <div key={comment.id || index} className="p-3 bg-[#FDFBF7] border border-[#E9E1D4] rounded-xl space-y-1.5">
+                          <div className="flex justify-between items-center text-[10px] text-brand-secondary font-bold">
+                            <span className="text-brand-primary">{comment.usuarioNombre}</span>
+                            <span>{new Date(comment.fechaRegistro).toLocaleString('es-MX', {
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}</span>
+                          </div>
+                          <p className="text-xs text-[#2D2D2D] leading-relaxed font-medium">
+                            {comment.texto}
+                          </p>
+                          {comment.foto && (
+                            <div className="relative mt-2 max-w-xs overflow-hidden rounded-lg border border-[#E9E1D4]">
+                              <img 
+                                src={comment.foto} 
+                                alt="Evidencia de avistamiento" 
+                                className="w-full object-cover max-h-40"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xxs text-brand-secondary italic text-center py-4 bg-[#FDFBF7] border border-[#E9E1D4] rounded-xl">
+                        Nadie ha comentado todavía. Si tienes alguna pista o foto, ¡compártela!
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Add comment Form */}
+                  {user && (
+                    <form onSubmit={handleCommentSubmit} className="space-y-3 pt-2">
+                      <div className="relative">
+                        <textarea
+                          rows={2}
+                          value={commentText}
+                          onChange={(e) => setCommentText(e.target.value)}
+                          placeholder="¿Viste a la mascota? Comenta aquí detalles, dirección o estado..."
+                          className="w-full p-3 bg-white border border-[#E9E1D4] rounded-xl focus:border-brand-primary focus:outline-none focus:ring-2 focus:ring-brand-primary/10 text-xs font-semibold text-[#2D2D2D]"
+                          required
+                        />
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                        <div className="flex items-center space-x-2 w-full sm:w-auto">
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="h-9 px-3 bg-[#FDFBF7] border border-[#E9E1D4] hover:bg-[#F5F2ED] text-brand-secondary rounded-xl text-xxs font-bold flex items-center space-x-1.5 cursor-pointer"
+                          >
+                            <Camera className="h-3.5 w-3.5" />
+                            <span>Adjuntar Foto</span>
+                          </button>
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleFileChange}
+                            accept="image/*"
+                            className="hidden"
+                          />
+                          {commentPhoto && (
+                            <span className="text-[10px] text-brand-primary font-bold bg-brand-primary-light px-2.5 py-0.5 rounded-full border border-[#E9E1D4] flex items-center">
+                              Foto cargada
+                              <button
+                                type="button"
+                                onClick={() => setCommentPhoto(undefined)}
+                                className="ml-1 text-red-500 font-bold hover:text-red-700"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          type="submit"
+                          className="w-full sm:w-auto h-9 px-4 bg-brand-primary hover:bg-brand-primary-hover text-[#FDFBF7] rounded-xl text-xxs font-bold flex items-center justify-center space-x-1 shadow-sm uppercase tracking-wider border-0 cursor-pointer"
+                        >
+                          Comentar
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
 
               </div>

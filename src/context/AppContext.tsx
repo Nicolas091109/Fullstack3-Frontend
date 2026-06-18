@@ -13,6 +13,9 @@ interface AppContextType {
   addReport: (newReport: Omit<Report, 'id' | 'date' | 'reporter' | 'reporterEmail'>) => Promise<void>;
   deleteReport: (id: string) => Promise<void>;
   updateReport: (updatedReport: Report) => Promise<void>;
+  addComment: (reportId: string, texto: string, foto?: string) => Promise<void>;
+  sendChatMessage: (receptorId: number, receptorNombre: string, texto: string) => Promise<void>;
+  fetchUserMessages: () => Promise<any[]>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -97,6 +100,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           reporterEmail: userDetails.email,
           mapX: r.mapX ?? 50,
           mapY: r.mapY ?? 50,
+          comments: r.comentarios || [],
           // hidden metadata for edits
           originalUbicacionId: r.ubicacionId,
           originalUsuarioId: r.usuarioId
@@ -267,8 +271,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const addComment = async (reportId: string, texto: string, foto?: string) => {
+    try {
+      const response = await fetch(`/api/reportes/${reportId}/comentarios`, {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          texto,
+          foto,
+          usuarioId: user ? user.id : 0,
+          usuarioNombre: user ? user.name : 'Vecino Anónimo'
+        })
+      });
+      if (!response.ok) throw new Error('Error al guardar comentario');
+      await fetchReports();
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      throw error;
+    }
+  };
+
+  const sendChatMessage = async (receptorId: number, receptorNombre: string, texto: string) => {
+    try {
+      const response = await fetch('/api/reportes/chat/enviar', {
+        method: 'POST',
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({
+          emisorId: user ? user.id : 0,
+          emisorNombre: user ? user.name : 'Vecino Anónimo',
+          receptorId,
+          receptorNombre,
+          texto
+        })
+      });
+      if (!response.ok) throw new Error('Error al enviar mensaje');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      throw error;
+    }
+  };
+
+  const fetchUserMessages = async () => {
+    try {
+      if (!user || !user.id) return [];
+      const response = await fetch(`/api/reportes/chat/usuario/${user.id}`, {
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) throw new Error('Error al obtener mensajes');
+      return await response.json();
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      return [];
+    }
+  };
+
   return (
-    <AppContext.Provider value={{ user, reports, usersList, geoList, login, register, logout, addReport, deleteReport, updateReport }}>
+    <AppContext.Provider value={{
+      user, reports, usersList, geoList, login, register, logout, addReport, deleteReport, updateReport,
+      addComment, sendChatMessage, fetchUserMessages
+    }}>
       {children}
     </AppContext.Provider>
   );

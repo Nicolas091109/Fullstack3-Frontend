@@ -4,7 +4,8 @@ import { useApp } from '../context/AppContext';
 import { CreateReportView } from '../components/user-views/CreateReportView';
 import { ViewReportsView } from '../components/user-views/ViewReportsView';
 import { SatelliteMapView } from '../components/user-views/SatelliteMapView';
-import { List, PlusCircle, Map, Heart } from 'lucide-react';
+import { ChatsView } from '../components/user-views/ChatsView';
+import { List, PlusCircle, Map, Heart, MessageSquare } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const UserDashboard: React.FC = () => {
@@ -21,6 +22,9 @@ export const UserDashboard: React.FC = () => {
     }
     if (currentPath === '/usuario/mapa') {
       return <SatelliteMapView />;
+    }
+    if (currentPath === '/usuario/chats') {
+      return <ChatsView />;
     }
     // Default fallback to ViewReports
     return <ViewReportsView />;
@@ -47,6 +51,13 @@ export const UserDashboard: React.FC = () => {
       path: '/usuario/mapa',
       icon: Map,
       badge: reports.length > 0 ? `${reports.length} Pines` : null
+    },
+    {
+      id: 'chats',
+      label: 'Mensajes',
+      path: '/usuario/chats',
+      icon: MessageSquare,
+      badge: null
     }
   ];
 

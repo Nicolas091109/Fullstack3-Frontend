@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import { LogOut, Shield, Heart, PlusCircle, Map, List } from 'lucide-react';
+import { LogOut, Shield, Heart, PlusCircle, Map, List, MessageSquare } from 'lucide-react';
 import { motion } from 'motion/react';
 
 export const Navbar: React.FC = () => {
@@ -72,6 +72,17 @@ export const Navbar: React.FC = () => {
               >
                 <Map className="h-4 w-4" />
                 <span>Mapa Satelital</span>
+              </Link>
+              <Link
+                to="/usuario/chats"
+                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  location.pathname === '/usuario/chats'
+                    ? 'bg-brand-primary-light text-brand-primary shadow-sm'
+                    : 'text-[#E9E1D4] hover:text-[#FDFBF7] hover:bg-white/5'
+                }`}
+              >
+                <MessageSquare className="h-4 w-4" />
+                <span>Mensajes</span>
               </Link>
             </nav>
           )}

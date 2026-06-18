@@ -78,6 +78,15 @@ function AppRouter() {
                 </AuthGuard>
               } 
             />
+            <Route 
+              path="/usuario/chats" 
+              element={
+                <AuthGuard requiredRole="user">
+                  <UserDashboard />
+                </AuthGuard>
+              } 
+            />
+
 
             {/* Admin Dashboard Page */}
             <Route 

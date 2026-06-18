@@ -1,0 +1,6 @@
+{
+  "name": "Sanos y Salvos",
+  "description": "Aplicación web para el reporte de animales perdidos y avistados, reuniendo familias una mascota a la vez.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -38,7 +38,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const savedUser = savedUserStr ? JSON.parse(savedUserStr) : null;
     const token = user?.token || savedUser?.token;
 
-    const headers: Record<string, string> = { ...extraHeaders };
+    const headers: Record<string, string> = {
+      'bypass-tunnel-reminder': 'true',
+      ...extraHeaders
+    };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
@@ -127,7 +130,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const response = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'bypass-tunnel-reminder': 'true'
+        },
         body: JSON.stringify({ email, password })
       });
       
@@ -159,7 +165,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const response = await fetch(`${API_BASE}/api/auth/register`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'bypass-tunnel-reminder': 'true'
+        },
         body: JSON.stringify({
           email,
           password,
